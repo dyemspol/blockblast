@@ -41,7 +41,9 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({ score, bestScore, combo 
       <div className="combo-indicator-bar" aria-live="polite">
         {combo > 1 && (
           <div className="combo-badge">
-            <span>🔥</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2c-.5 2.5-2 4.5-4 6-1.5 1.2-2.5 3-2.5 5 0 4.1 3.4 7.5 7.5 7.5s7.5-3.4 7.5-7.5c0-3.5-2.2-6.5-5-7.5.3 1.5-.5 3-1.8 3.5C13 8 13.5 4.5 12 2z" />
+            </svg>
             <span>COMBO x{combo}</span>
           </div>
         )}

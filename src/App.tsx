@@ -87,6 +87,11 @@ export function App() {
   } | null>(null);
   const [imminentClears, setImminentClears] = useState<{ rows: number[]; cols: number[] } | null>(null);
 
+  // Smooth drag interpolation refs
+  const targetPointerRef = useRef({ x: 0, y: 0 });
+  const currentPointerRef = useRef({ x: 0, y: 0 });
+  const rafIdRef = useRef<number | null>(null);
+
   // DOM Refs
   const boardRef = useRef<HTMLDivElement>(null);
   const appContainerRef = useRef<HTMLDivElement>(null);
@@ -141,6 +146,59 @@ export function App() {
     const cellSize = (innerWidth - 4 * (BOARD_SIZE - 1)) / BOARD_SIZE;
     return { cellSize, boardRect: rect };
   }, []);
+
+  // Calculate board projection helper
+  const updateBoardProjection = useCallback(
+    (curX: number, curY: number, piece: TrayPiece, grabOff: { x: number; y: number }) => {
+      const { cellSize, boardRect } = getBoardCellMetrics();
+      if (!boardRect) {
+        setGhostPlacement(null);
+        setImminentClears(null);
+        return;
+      }
+
+      const pieceLeft = curX - grabOff.x;
+      const pieceTop = curY - grabOff.y;
+      const boardInnerLeft = boardRect.left + 8;
+      const boardInnerTop = boardRect.top + 8;
+
+      const col = Math.round((pieceLeft - boardInnerLeft) / (cellSize + 4));
+      const row = Math.round((pieceTop - boardInnerTop) / (cellSize + 4));
+
+      if (canPlacePiece(piece.shape, board, row, col)) {
+        const ghostCellsList: { row: number; col: number; color: string }[] = [];
+        for (let r = 0; r < piece.shape.matrix.length; r++) {
+          for (let c = 0; c < piece.shape.matrix[r].length; c++) {
+            if (piece.shape.matrix[r][c] === 1) {
+              ghostCellsList.push({
+                row: row + r,
+                col: col + c,
+                color: piece.shape.color,
+              });
+            }
+          }
+        }
+
+        setGhostPlacement({
+          startRow: row,
+          startCol: col,
+          cells: ghostCellsList,
+        });
+
+        const simBoard = placePiece(piece.shape, board, row, col);
+        const { rows, cols } = findCompletedLines(simBoard);
+        if (rows.length > 0 || cols.length > 0) {
+          setImminentClears({ rows, cols });
+        } else {
+          setImminentClears(null);
+        }
+      } else {
+        setGhostPlacement(null);
+        setImminentClears(null);
+      }
+    },
+    [getBoardCellMetrics, board]
+  );
 
   // Theme progression unlocker
   const triggerUnlockNextTheme = useCallback(() => {
@@ -212,89 +270,98 @@ export function App() {
     const piecePxWidth = piece.shape.width * cellSize;
     const piecePxHeight = piece.shape.height * cellSize;
 
-    // Mobile finger offset: place piece 75px above touch point so thumb does not obscure it
-    const touchYOffset = isTouch ? 75 : 20;
+    // Use user-configured fingerOffset on touch, or subtle 20px on mouse
+    const verticalOffset = isTouch ? settings.fingerOffset : Math.min(settings.fingerOffset, 20);
 
-    setGrabOffset({
+    const grabOff = {
       x: piecePxWidth / 2,
       y: piecePxHeight / 2,
-    });
+    };
+    setGrabOffset(grabOff);
 
-    setPointerPos({
-      x: e.clientX,
-      y: e.clientY - touchYOffset,
-    });
+    const startX = e.clientX;
+    const startY = e.clientY - verticalOffset;
+
+    targetPointerRef.current = { x: startX, y: startY };
+    currentPointerRef.current = { x: startX, y: startY };
+    setPointerPos({ x: startX, y: startY });
 
     setActiveDragPiece(piece);
     sound.playPickup();
     haptics.pickup();
+
+    updateBoardProjection(startX, startY, piece, grabOff);
   };
+
+  // Animation frame loop for smooth drag interpolation
+  useEffect(() => {
+    if (!activeDragPiece) {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      return;
+    }
+
+    const animateDrag = () => {
+      const sensitivity = settings.dragSensitivity || 0.85;
+      if (sensitivity >= 0.98) {
+        currentPointerRef.current.x = targetPointerRef.current.x;
+        currentPointerRef.current.y = targetPointerRef.current.y;
+      } else {
+        const factor = Math.min(Math.max(sensitivity, 0.25), 0.95);
+        currentPointerRef.current.x += (targetPointerRef.current.x - currentPointerRef.current.x) * factor;
+        currentPointerRef.current.y += (targetPointerRef.current.y - currentPointerRef.current.y) * factor;
+      }
+
+      setPointerPos({
+        x: currentPointerRef.current.x,
+        y: currentPointerRef.current.y,
+      });
+
+      updateBoardProjection(
+        currentPointerRef.current.x,
+        currentPointerRef.current.y,
+        activeDragPiece,
+        grabOffset
+      );
+
+      rafIdRef.current = requestAnimationFrame(animateDrag);
+    };
+
+    rafIdRef.current = requestAnimationFrame(animateDrag);
+
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [activeDragPiece, grabOffset, settings.dragSensitivity, updateBoardProjection]);
 
   const handlePointerMove = useCallback(
     (e: PointerEvent) => {
       if (!activeDragPiece) return;
       e.preventDefault();
 
-      const touchYOffset = isTouchDevice ? 75 : 20;
-      const curX = e.clientX;
-      const curY = e.clientY - touchYOffset;
+      const verticalOffset = isTouchDevice ? settings.fingerOffset : Math.min(settings.fingerOffset, 20);
+      targetPointerRef.current = {
+        x: e.clientX,
+        y: e.clientY - verticalOffset,
+      };
 
-      setPointerPos({ x: curX, y: curY });
-
-      // Determine board coordinates
-      const { cellSize, boardRect } = getBoardCellMetrics();
-      if (!boardRect) {
-        setGhostPlacement(null);
-        setImminentClears(null);
-        return;
-      }
-
-      // Top-left of the dragged piece in viewport coordinates
-      const pieceLeft = curX - grabOffset.x;
-      const pieceTop = curY - grabOffset.y;
-
-      // Board inner top-left (accounting for 8px padding)
-      const boardInnerLeft = boardRect.left + 8;
-      const boardInnerTop = boardRect.top + 8;
-
-      const col = Math.round((pieceLeft - boardInnerLeft) / (cellSize + 4));
-      const row = Math.round((pieceTop - boardInnerTop) / (cellSize + 4));
-
-      if (canPlacePiece(activeDragPiece.shape, board, row, col)) {
-        // Build ghost cells
-        const ghostCellsList: { row: number; col: number; color: string }[] = [];
-        for (let r = 0; r < activeDragPiece.shape.matrix.length; r++) {
-          for (let c = 0; c < activeDragPiece.shape.matrix[r].length; c++) {
-            if (activeDragPiece.shape.matrix[r][c] === 1) {
-              ghostCellsList.push({
-                row: row + r,
-                col: col + c,
-                color: activeDragPiece.shape.color,
-              });
-            }
-          }
-        }
-
-        setGhostPlacement({
-          startRow: row,
-          startCol: col,
-          cells: ghostCellsList,
-        });
-
-        // Simulate hypothetical board to detect imminent clears
-        const simBoard = placePiece(activeDragPiece.shape, board, row, col);
-        const { rows, cols } = findCompletedLines(simBoard);
-        if (rows.length > 0 || cols.length > 0) {
-          setImminentClears({ rows, cols });
-        } else {
-          setImminentClears(null);
-        }
-      } else {
-        setGhostPlacement(null);
-        setImminentClears(null);
+      if (settings.dragSensitivity >= 0.98) {
+        currentPointerRef.current = { ...targetPointerRef.current };
+        setPointerPos({ ...targetPointerRef.current });
+        updateBoardProjection(
+          targetPointerRef.current.x,
+          targetPointerRef.current.y,
+          activeDragPiece,
+          grabOffset
+        );
       }
     },
-    [activeDragPiece, isTouchDevice, grabOffset, getBoardCellMetrics, board]
+    [activeDragPiece, isTouchDevice, settings.fingerOffset, settings.dragSensitivity, grabOffset, updateBoardProjection]
   );
 
   const handlePointerUp = useCallback(() => {
@@ -440,13 +507,22 @@ export function App() {
   // Global window pointer listeners while dragging
   useEffect(() => {
     if (activeDragPiece) {
+      const handleTouchMovePrevent = (e: TouchEvent) => {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      };
+
       window.addEventListener('pointermove', handlePointerMove);
       window.addEventListener('pointerup', handlePointerUp);
       window.addEventListener('pointercancel', handlePointerUp);
+      window.addEventListener('touchmove', handleTouchMovePrevent, { passive: false });
+
       return () => {
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
         window.removeEventListener('pointercancel', handlePointerUp);
+        window.removeEventListener('touchmove', handleTouchMovePrevent);
       };
     }
   }, [activeDragPiece, handlePointerMove, handlePointerUp]);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import type { Settings, GameStats } from '../game/types';
 import { THEMES, getThemeById, applyTheme } from '../game/themes';
 import { sound } from '../game/audio';
@@ -20,6 +20,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetStats,
   onClose,
 }) => {
+  // Test area interactive state
+  const [testBlockPos, setTestBlockPos] = useState<{ x: number; y: number } | null>(null);
+  const [isDraggingTest, setIsDraggingTest] = useState(false);
+  const testBoxRef = useRef<HTMLDivElement>(null);
+
   const toggleSound = () => {
     const updated = { ...settings, soundEnabled: !settings.soundEnabled };
     onUpdateSettings(updated);
@@ -30,6 +35,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const updated = { ...settings, hapticsEnabled: !settings.hapticsEnabled };
     onUpdateSettings(updated);
     sound.playClick();
+  };
+
+  const setSensitivity = (val: number) => {
+    onUpdateSettings({ ...settings, dragSensitivity: val });
+  };
+
+  const setOffset = (val: number) => {
+    onUpdateSettings({ ...settings, fingerOffset: val });
   };
 
   const selectTheme = (themeId: string) => {
@@ -44,6 +57,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (window.confirm('Are you sure you want to reset your high score and all game statistics?')) {
       onResetStats();
       sound.playClick();
+    }
+  };
+
+  // Test Area Drag Handlers
+  const handleTestPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!testBoxRef.current) return;
+    const boxRect = testBoxRef.current.getBoundingClientRect();
+    const isTouch = e.pointerType === 'touch';
+    const offset = isTouch ? settings.fingerOffset : Math.min(settings.fingerOffset, 25);
+
+    setIsDraggingTest(true);
+    setTestBlockPos({
+      x: e.clientX - boxRect.left,
+      y: e.clientY - boxRect.top - offset,
+    });
+    sound.playPickup();
+  };
+
+  const handleTestPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingTest || !testBoxRef.current) return;
+    e.preventDefault();
+    const boxRect = testBoxRef.current.getBoundingClientRect();
+    const isTouch = e.pointerType === 'touch';
+    const offset = isTouch ? settings.fingerOffset : Math.min(settings.fingerOffset, 25);
+
+    setTestBlockPos({
+      x: e.clientX - boxRect.left,
+      y: e.clientY - boxRect.top - offset,
+    });
+  };
+
+  const handleTestPointerUp = () => {
+    if (isDraggingTest) {
+      setIsDraggingTest(false);
+      setTestBlockPos(null);
+      sound.playPlace();
     }
   };
 
@@ -102,6 +152,131 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
+        {/* CONTROLS & ERGONOMICS SECTION */}
+        <div className="settings-section">
+          <div className="settings-section-header">
+            <span className="settings-section-title">TOUCH & DRAG CONTROLS</span>
+          </div>
+
+          {/* Drag Sensitivity */}
+          <div className="settings-control-card">
+            <div className="control-card-header">
+              <span className="control-card-label">Drag Sensitivity</span>
+              <span className="control-card-value">{Math.round(settings.dragSensitivity * 100)}%</span>
+            </div>
+
+            <div className="control-presets-row">
+              <button
+                type="button"
+                className={`preset-chip ${settings.dragSensitivity === 0.55 ? 'active' : ''}`}
+                onClick={() => setSensitivity(0.55)}
+              >
+                Low
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${settings.dragSensitivity === 0.85 ? 'active' : ''}`}
+                onClick={() => setSensitivity(0.85)}
+              >
+                Medium
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${settings.dragSensitivity === 1.0 ? 'active' : ''}`}
+                onClick={() => setSensitivity(1.0)}
+              >
+                High
+              </button>
+            </div>
+
+            <input
+              type="range"
+              min="0.30"
+              max="1.00"
+              step="0.05"
+              value={settings.dragSensitivity}
+              onChange={(e) => setSensitivity(parseFloat(e.target.value))}
+              className="settings-slider"
+              aria-label="Drag Sensitivity Slider"
+            />
+          </div>
+
+          {/* Finger Offset */}
+          <div className="settings-control-card">
+            <div className="control-card-header">
+              <span className="control-card-label">Finger-to-Block Gap (Offset)</span>
+              <span className="control-card-value">{settings.fingerOffset} px</span>
+            </div>
+
+            <div className="control-presets-row">
+              <button
+                type="button"
+                className={`preset-chip ${settings.fingerOffset === 40 ? 'active' : ''}`}
+                onClick={() => setOffset(40)}
+              >
+                Small (40px)
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${settings.fingerOffset === 70 ? 'active' : ''}`}
+                onClick={() => setOffset(70)}
+              >
+                Medium (70px)
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${settings.fingerOffset === 100 ? 'active' : ''}`}
+                onClick={() => setOffset(100)}
+              >
+                Large (100px)
+              </button>
+            </div>
+
+            <input
+              type="range"
+              min="20"
+              max="140"
+              step="5"
+              value={settings.fingerOffset}
+              onChange={(e) => setOffset(parseInt(e.target.value, 10))}
+              className="settings-slider"
+              aria-label="Finger Offset Slider"
+            />
+          </div>
+
+          {/* Live Interactive Drag Test Area */}
+          <div
+            className="interactive-drag-pad"
+            ref={testBoxRef}
+            onPointerDown={handleTestPointerDown}
+            onPointerMove={handleTestPointerMove}
+            onPointerUp={handleTestPointerUp}
+            onPointerCancel={handleTestPointerUp}
+          >
+            {!isDraggingTest && (
+              <div className="drag-pad-hint">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 9l4-4 4 4M9 5v14M19 15l-4 4-4-4M15 19V5" />
+                </svg>
+                <span>Touch & drag here to test sensitivity & gap</span>
+              </div>
+            )}
+
+            {/* Test Block */}
+            <div
+              className={`test-draggable-block ${isDraggingTest ? 'dragging' : ''}`}
+              style={{
+                left: testBlockPos ? `${testBlockPos.x}px` : '50%',
+                top: testBlockPos ? `${testBlockPos.y}px` : '50%',
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              <div className="test-block-tile" />
+              <div className="test-block-tile" />
+            </div>
+          </div>
+        </div>
+
         {/* Dynamic Themes Gallery */}
         <div className="themes-section">
           <div className="themes-section-header">
@@ -133,11 +308,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div className="theme-card-status">
                       {isActive ? (
-                        <span className="theme-active-tag">✓ ACTIVE</span>
+                        <span className="theme-active-tag">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '3px' }}>
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          ACTIVE
+                        </span>
                       ) : isUnlocked ? (
                         <span className="theme-unlocked-tag">UNLOCKED</span>
                       ) : (
-                        <span className="theme-locked-tag">🔒 LOCKED</span>
+                        <span className="theme-locked-tag">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '3px' }}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                          LOCKED
+                        </span>
                       )}
                     </div>
                   </div>
@@ -169,7 +355,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={onTriggerTestUnlock}
             title="Simulates an achievement to unlock the next progressive theme"
           >
-            ⚡ Test Next Theme Unlock
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ display: 'inline-block', verticalAlign: '-2px', marginRight: '5px' }}>
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            Test Next Theme Unlock
           </button>
         </div>
 

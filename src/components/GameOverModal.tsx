@@ -37,7 +37,9 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
         {isNewBest && (
           <div className="new-record-pill">
-            <span>🏆</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2l2.4 4.8 5.3.8-3.8 3.7.9 5.3L12 16.1l-4.8 2.5.9-5.3-3.8-3.7 5.3-.8L12 2z" />
+            </svg>
             <span>NEW BEST RECORD!</span>
           </div>
         )}

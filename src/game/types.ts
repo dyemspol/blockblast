@@ -46,4 +46,6 @@ export interface Settings {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   activeThemeId: string;
+  dragSensitivity: number; // 0.3 to 1.0 (default 0.85)
+  fingerOffset: number;    // 20 to 140 (default 70)
 }

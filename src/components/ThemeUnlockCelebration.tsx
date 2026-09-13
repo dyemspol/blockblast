@@ -44,7 +44,9 @@ export const ThemeUnlockCelebration: React.FC<ThemeUnlockCelebrationProps> = ({
     >
       <div className="theme-unlock-card" onClick={(e) => e.stopPropagation()}>
         <div className="theme-unlock-badge">
-          <span>✨</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2l2.4 7.4 7.6.2-6 4.8 2.3 7.6-6.3-4.6-6.3 4.6 2.3-7.6-6-4.8 7.6-.2z" />
+          </svg>
           <span>NEW THEME UNLOCKED</span>
         </div>
 

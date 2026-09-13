@@ -18,6 +18,8 @@ const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   hapticsEnabled: true,
   activeThemeId: 'midnight',
+  dragSensitivity: 0.85,
+  fingerOffset: 70,
 };
 
 export function loadStats(): GameStats {
@@ -111,6 +113,8 @@ export function loadSettings(): Settings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       activeThemeId: parsed.activeThemeId || 'midnight',
+      dragSensitivity: typeof parsed.dragSensitivity === 'number' ? parsed.dragSensitivity : 0.85,
+      fingerOffset: typeof parsed.fingerOffset === 'number' ? parsed.fingerOffset : 70,
     };
   } catch {
     return DEFAULT_SETTINGS;

@@ -28,6 +28,9 @@ import {
   incrementBoardClears,
   unlockThemeInStorage,
   resetAllStats,
+  loadGameProgress,
+  saveGameProgress,
+  clearGameProgress,
 } from './game/storage';
 import { THEMES, getThemeById, getNextLockedTheme, applyTheme } from './game/themes';
 import type { GameTheme } from './game/themes';
@@ -55,15 +58,27 @@ export function App() {
   // Active theme instance
   const activeTheme = getThemeById(settings.activeThemeId);
 
-  // --- Game Session State ---
-  const [board, setBoard] = useState<BoardGrid>(createEmptyBoard);
-  const [trayPieces, setTrayPieces] = useState<TrayPiece[]>(() =>
-    generateThreePieces(createEmptyBoard(), activeTheme.blockColors)
+  // Load saved in-progress game session if available
+  const savedProgressRef = useRef(loadGameProgress());
+  const savedProgress = savedProgressRef.current;
+
+  // --- Game Session State (restores ongoing session if present) ---
+  const [board, setBoard] = useState<BoardGrid>(() =>
+    savedProgress?.board ? savedProgress.board : createEmptyBoard()
   );
-  const [score, setScore] = useState<number>(0);
-  const [combo, setCombo] = useState<number>(0);
-  const [linesClearedThisGame, setLinesClearedThisGame] = useState<number>(0);
-  const [maxComboThisGame, setMaxComboThisGame] = useState<number>(0);
+  const [trayPieces, setTrayPieces] = useState<TrayPiece[]>(() =>
+    savedProgress?.trayPieces
+      ? savedProgress.trayPieces
+      : generateThreePieces(createEmptyBoard(), activeTheme.blockColors)
+  );
+  const [score, setScore] = useState<number>(() => savedProgress?.score ?? 0);
+  const [combo, setCombo] = useState<number>(() => savedProgress?.combo ?? 0);
+  const [linesClearedThisGame, setLinesClearedThisGame] = useState<number>(
+    () => savedProgress?.linesClearedThisGame ?? 0
+  );
+  const [maxComboThisGame, setMaxComboThisGame] = useState<number>(
+    () => savedProgress?.maxComboThisGame ?? 0
+  );
   const [isGameOverState, setIsGameOverState] = useState<boolean>(false);
   const [isNewBestRecord, setIsNewBestRecord] = useState<boolean>(false);
 
@@ -226,6 +241,7 @@ export function App() {
     (currentTray: TrayPiece[], currentBoard: BoardGrid) => {
       const over = isGameOver(currentTray, currentBoard);
       if (over) {
+        clearGameProgress();
         setIsGameOverState(true);
         sound.playGameOver();
         haptics.gameOver();
@@ -245,6 +261,7 @@ export function App() {
 
   // Restart Game
   const handleRestart = useCallback(() => {
+    clearGameProgress();
     const freshBoard = createEmptyBoard();
     const freshTray = generateThreePieces(freshBoard, activeTheme.blockColors);
     setBoard(freshBoard);
@@ -470,6 +487,28 @@ export function App() {
             setTrayPieces(updatedTray);
           }
 
+          const currentTotalScore = isAllClear
+            ? score + scoreResult.totalPoints + 1000
+            : score + scoreResult.totalPoints;
+          const currentTotalLines = linesClearedThisGame + linesCount;
+          const currentMaxCombo = Math.max(maxComboThisGame, scoreResult.comboCount);
+
+          const over = isGameOver(finalTray, clearedBoard);
+          if (over) {
+            clearGameProgress();
+          } else {
+            saveGameProgress({
+              board: clearedBoard,
+              trayPieces: finalTray,
+              score: currentTotalScore,
+              combo: scoreResult.comboCount,
+              linesClearedThisGame: currentTotalLines,
+              maxComboThisGame: currentMaxCombo,
+              isGameOver: false,
+              savedAt: Date.now(),
+            });
+          }
+
           checkAndHandleGameOver(finalTray, clearedBoard);
         }, 280);
       } else {
@@ -482,6 +521,25 @@ export function App() {
           setTrayPieces(finalTray);
         } else {
           setTrayPieces(updatedTray);
+        }
+
+        const currentTotalScore = score + scoreResult.totalPoints;
+        const currentMaxCombo = Math.max(maxComboThisGame, scoreResult.comboCount);
+
+        const over = isGameOver(finalTray, nextBoard);
+        if (over) {
+          clearGameProgress();
+        } else {
+          saveGameProgress({
+            board: nextBoard,
+            trayPieces: finalTray,
+            score: currentTotalScore,
+            combo: scoreResult.comboCount,
+            linesClearedThisGame,
+            maxComboThisGame: currentMaxCombo,
+            isGameOver: false,
+            savedAt: Date.now(),
+          });
         }
 
         checkAndHandleGameOver(finalTray, nextBoard);

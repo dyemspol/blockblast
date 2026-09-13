@@ -3,7 +3,7 @@ import { useRegisterSW } from 'virtual:pwa-register/react';
 
 export const UpdateManager: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
-  const [updateMessage, setUpdateMessage] = useState('Updating game...');
+  const [updateMessage, setUpdateMessage] = useState('Updating to the latest version...');
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -12,42 +12,63 @@ export const UpdateManager: React.FC = () => {
     onRegistered(registration) {
       if (!registration) return;
 
-      // 1. Check for updates immediately on online reconnection
-      const handleOnline = () => {
-        console.log('[PWA] Network online detected. Checking for updates...');
-        registration.update().catch(err => console.warn('[PWA] Update check failed:', err));
+      const triggerUpdateCheck = () => {
+        if (navigator.onLine) {
+          registration.update().catch(err => {
+            console.warn('[PWA] Background update check failed:', err);
+          });
+        }
       };
 
-      // 2. Check for updates whenever the app/tab becomes visible (e.g. returning to PWA on mobile)
+      // 1. Initial check shortly after app starts
+      setTimeout(triggerUpdateCheck, 3000);
+
+      // 2. Check for updates on online reconnection
+      const handleOnline = () => {
+        console.log('[PWA] Network reconnected online. Checking for new version...');
+        triggerUpdateCheck();
+      };
+
+      // 3. Check for updates on visibility change (app resumed or tab active)
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
-          console.log('[PWA] App resumed. Checking for new version...');
-          registration.update().catch(err => console.warn('[PWA] Update check failed:', err));
+          triggerUpdateCheck();
         }
+      };
+
+      // 4. Check on window focus
+      const handleFocus = () => {
+        triggerUpdateCheck();
       };
 
       window.addEventListener('online', handleOnline);
       document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleFocus);
 
-      // 3. Periodic check every 30 minutes
-      setInterval(() => {
-        registration.update().catch(err => console.warn('[PWA] Periodic update check failed:', err));
-      }, 30 * 60 * 1000);
+      // 5. Periodic check every 30 minutes
+      const intervalId = setInterval(triggerUpdateCheck, 30 * 60 * 1000);
 
-      // 4. Watch for installing worker to trigger the subtle "Updating game..." indicator
+      // 6. Watch for installing worker to trigger the subtle "Updating to the latest version..." indicator
       registration.addEventListener('updatefound', () => {
         const installingWorker = registration.installing;
         if (installingWorker) {
           setIsUpdating(true);
-          setUpdateMessage('Updating game...');
+          setUpdateMessage('Updating to the latest version...');
 
           installingWorker.addEventListener('statechange', () => {
             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              setUpdateMessage('Update ready! Applying...');
+              setUpdateMessage('Updating to the latest version...');
             }
           });
         }
       });
+
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleFocus);
+        clearInterval(intervalId);
+      };
     },
     onRegisterError(error) {
       console.error('[PWA] SW registration error:', error);
@@ -58,15 +79,14 @@ export const UpdateManager: React.FC = () => {
   useEffect(() => {
     if (needRefresh) {
       setIsUpdating(true);
-      setUpdateMessage('Updating game...');
-      // Execute the update
+      setUpdateMessage('Updating to the latest version...');
       updateServiceWorker(true).then(() => {
         setNeedRefresh(false);
       });
     }
   }, [needRefresh, updateServiceWorker, setNeedRefresh]);
 
-  // Listen for controllerchange: new service worker has taken over clients
+  // Listen for controllerchange: new service worker has claimed clients
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
 
@@ -74,12 +94,29 @@ export const UpdateManager: React.FC = () => {
     const handleControllerChange = () => {
       if (refreshing) return;
       refreshing = true;
+
+      // Anti-infinite refresh loop guard
+      const LAST_RELOAD_KEY = 'blockblast_pwa_last_reload';
+      try {
+        const lastReload = parseInt(sessionStorage.getItem(LAST_RELOAD_KEY) || '0', 10);
+        const now = Date.now();
+        if (now - lastReload < 15000) {
+          console.log('[PWA] Suppressing rapid duplicate reload.');
+          setIsUpdating(false);
+          return;
+        }
+        sessionStorage.setItem(LAST_RELOAD_KEY, now.toString());
+      } catch {
+        // Ignore session storage errors
+      }
+
       setIsUpdating(true);
-      setUpdateMessage('Game updated! Reloading...');
-      // Clean reload to pick up newest HTML, CSS, and JS bundles
+      setUpdateMessage('Updating to the latest version...');
+
+      // Smooth clean reload to fetch latest assets
       setTimeout(() => {
         window.location.reload();
-      }, 400);
+      }, 500);
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);

@@ -49,3 +49,14 @@ export interface Settings {
   dragSensitivity: number; // 0.3 to 1.0 (default 0.85)
   fingerOffset: number;    // 20 to 140 (default 70)
 }
+
+export interface GameProgress {
+  board: BoardGrid;
+  trayPieces: TrayPiece[];
+  score: number;
+  combo: number;
+  linesClearedThisGame: number;
+  maxComboThisGame: number;
+  isGameOver: boolean;
+  savedAt: number;
+}

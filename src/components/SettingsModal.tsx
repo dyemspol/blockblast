@@ -162,7 +162,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="settings-control-card">
             <div className="control-card-header">
               <span className="control-card-label">Drag Sensitivity</span>
-              <span className="control-card-value">{Math.round(settings.dragSensitivity * 100)}%</span>
             </div>
 
             <div className="control-presets-row">
@@ -204,8 +203,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Finger Offset */}
           <div className="settings-control-card">
             <div className="control-card-header">
-              <span className="control-card-label">Finger-to-Block Gap (Offset)</span>
-              <span className="control-card-value">{settings.fingerOffset} px</span>
+              <span className="control-card-label">Finger-to-Block Gap</span>
             </div>
 
             <div className="control-presets-row">
@@ -214,21 +212,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 className={`preset-chip ${settings.fingerOffset === 40 ? 'active' : ''}`}
                 onClick={() => setOffset(40)}
               >
-                Small (40px)
+                Small
               </button>
               <button
                 type="button"
                 className={`preset-chip ${settings.fingerOffset === 70 ? 'active' : ''}`}
                 onClick={() => setOffset(70)}
               >
-                Medium (70px)
+                Medium
               </button>
               <button
                 type="button"
                 className={`preset-chip ${settings.fingerOffset === 100 ? 'active' : ''}`}
                 onClick={() => setOffset(100)}
               >
-                Large (100px)
+                Large
               </button>
             </div>
 

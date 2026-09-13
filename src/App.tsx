@@ -41,6 +41,7 @@ import { GameOverModal } from './components/GameOverModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ThemeUnlockCelebration } from './components/ThemeUnlockCelebration';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { UpdateManager } from './components/UpdateManager';
 
 import './styles/main.css';
 import './styles/board.css';
@@ -482,6 +483,9 @@ export function App() {
 
   return (
     <div className="game-app-container" ref={appContainerRef}>
+      {/* PWA Auto-Update Indicator */}
+      <UpdateManager />
+
       {/* PWA Install Button */}
       <PWAInstallPrompt />
 
